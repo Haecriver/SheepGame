@@ -9,45 +9,63 @@ import org.newdawn.slick.util.ResourceLoader;
 
 
 public class Mouton extends Image {
-	//états
+	
+	//Variables Utilitaire
 	private boolean debug=false;
 	
 	private enum Etat {BELE,BROUTE,DEPLACE,MORT,ATTEND};
 	private Etat etat;
 	
-	private enum PhaseMort {P0,P1,P2,P3,P4,P5,DEAD};
-	private PhaseMort phaseMort;
+		//Variables Random
+		private Random random;
+		private int randomInt;
+		
+		//Variables dimension
+		private int fondWidth;
+		private int fondHeight;
 	
-	private int vitesse;
+	//Variables Déplacement
+		//vitesse
+		private int vitesse;
+		private final int vitesseMin=4;
+		
+		//position
+		private int posX;
+		private int posY;
+		private int futurPosX;
+		private int futurPosY;
+		
+		//bond
+		private double bond;
+		private int hauteurBond=8;
+		private int frequenceBond=2;
 	
-	private int posX;
-	private int posY;
-	private int futurPosX;
-	private int futurPosY;
-	private double bond;
-	
+	//Variables Broutage
 	private long brouteTime;
 	private long brouteTimeDeb;
 	private long brouteCpt;
 	
-	private Random random;
-	private int randomInt;
-	
-	private int fondWidth;
-	private int fondHeight;
-	
+	//Variables belement
 	private Audio belement;
 	private long beleTimeDeb;
 	private int beleDuree;
 	
+	//Variables Mort
+	private enum PhaseMort {P0,P1,P2,P3,P4,P5,DEAD};
+	private PhaseMort phaseMort;
+	
 	private Audio mort;
 	private long debMort;
+	
+	//Point de vie
 	private int pointDeVie;
+	private final int pointDeVieMax=15;
 	
+	//Variables hurt
 	private Audio coup;
-	
 	private boolean moutonClicked;
 	
+	//Constructeur
 	Mouton (int fondWidth,int fondHeight){
 		super("PNG","res/mouton_droite_fermee.png");
 		
@@ -81,6 +99,7 @@ public class Mouton extends Image {
 		phaseMort=PhaseMort.P0;
 	}
 	
+	//Fonctions utilitaires
 	private void tirageRandom(){
 		randomInt=(Math.abs(random.nextInt()))%100;
 	}
@@ -89,11 +108,69 @@ public class Mouton extends Image {
 	    return System.nanoTime() / 1000000;
 	}
 	
-	//Gestion du mouton
+	private boolean testMouse(){
+		//Le mouton fait 128x128 donc
+		//mouseX doit se trouver entre posX et posX+128
+		//mouseY doit se trouver entre posY+bond et posY+128+bond
+		float mouseX=Mouse.getX();
+		float mouseY=fondHeight-Mouse.getY();
+		boolean leftButtonDown = Mouse.isButtonDown(0);
+		boolean rightButtonDown = Mouse.isButtonDown(1);
+		
+		boolean mousePressedOnMouton=((leftButtonDown||rightButtonDown)&&(mouseX>posX&&mouseX<(posX+128))&&(mouseY>(posY+(int)bond)&&mouseY<(posY+128+(int)bond)));
+		boolean res=!moutonClicked&&mousePressedOnMouton;
+		moutonClicked=mousePressedOnMouton;
+		if (debug){
+			System.out.println("Pos Mouse "+mouseX+" "+mouseY);
+			System.out.println("Entre "+posX+" "+(posX+128)+" et "+(posY+(int)bond)+" "+(posY+128+(int)bond));
+		}
+		return res;
+	}
+	
+	//Setters
+	public void setDestination(int posX, int posY){
+		futurPosX=posX;
+		futurPosY=posY;
+	}
+	
+	public void setVitesse(int vitesse){
+		this.vitesse=vitesse;
+	}
+	
+	public void setBond (double bond){
+		this.bond=bond;
+	}
+	
+	private void addPDV(int valPV){
+		int new_pointDeVie=pointDeVie+valPV;
+		if (new_pointDeVie>=0&&new_pointDeVie<=pointDeVieMax){
+			pointDeVie=new_pointDeVie;
+		}
+		//domage
+		if (etat!=Etat.MORT&&valPV<0){
+			//Belement avec une autre image
+			if (futurPosX>posX){
+				changeImage("PNG","res/death/mouton_droite_hurt.png");
+			}
+			else{
+				changeImage("PNG","res/death/mouton_gauche_hurt.png");
+			}
+			beleTimeDeb=getTime();
+			belement.playAsSoundEffect(1.0f, 1.0f, false);
+			SoundStore.get().poll(0);
+			etat=Etat.BELE;
+			beleDuree=400;
+		}
+		if (pointDeVie<=0){
+			etat=Etat.MORT;
+		}
+	}
+	
+	//Fonction de gestion du mouton
 	public void render(){
 		
-		if (testMouse()&&etat!=Etat.MORT){
-			ajoutPDV(-1);
+		if (etat!=Etat.MORT&&testMouse()){
+			addPDV(-1);
 			coup.playAsSoundEffect(1.0f, 0.5f, false);
 		}
 		
@@ -103,7 +180,7 @@ public class Mouton extends Image {
 					System.out.println("Deplacement");
 					System.out.println("Src = "+posX+" "+posY+" Dest = "+futurPosX+" "+futurPosY);
 				}
-				bond=(Math.sin(Math.abs((posX)/(2*vitesse)))+1)*8;
+				setBond((Math.sin(Math.abs((posX)/(frequenceBond*vitesse)))+1)*hauteurBond);
 				deplacer();
 			break;
 			
@@ -131,6 +208,7 @@ public class Mouton extends Image {
 				
 				brouteCpt++;
 				if (getTime()-brouteTimeDeb>brouteTime){
+					addPDV(5);
 					etat=Etat.ATTEND;
 				}
 			break;
@@ -155,9 +233,8 @@ public class Mouton extends Image {
 			default :
 				tirageRandom();
 				if (randomInt<33){//deplacement
-					futurPosX= (Math.abs(random.nextInt()))%(fondWidth-texture.getImageWidth());
-					futurPosY= (Math.abs(random.nextInt()))%(fondHeight-texture.getImageHeight());
-					vitesse=(Math.abs(randomInt)%5)+1;
+					setDestination((Math.abs(random.nextInt()))%(fondWidth-texture.getImageWidth()),Math.abs(random.nextInt())%(fondHeight-texture.getImageHeight()));
+					setVitesse((Math.abs(randomInt)%5)+vitesseMin);
 					
 					if (futurPosX>posX){
 						changeImage("PNG","res/mouton_droite_fermee.png");
@@ -185,48 +262,8 @@ public class Mouton extends Image {
 		}
 		super.render(posX,posY+(int)bond);
 	}
-	
-	private boolean testMouse(){
-		//Le mouton fait 128x128 donc
-		//mouseX doit se trouver entre posX et posX+128
-		//mouseY doit se trouver entre posY+bond et posY+128+bond
-		float mouseX=Mouse.getX();
-		float mouseY=fondHeight-Mouse.getY();
-		boolean leftButtonDown = Mouse.isButtonDown(0);
-		boolean rightButtonDown = Mouse.isButtonDown(1);
-		
-		boolean mousePressedOnMouton=((leftButtonDown||rightButtonDown)&&(mouseX>posX&&mouseX<(posX+128))&&(mouseY>(posY+(int)bond)&&mouseY<(posY+128+(int)bond)));
-		boolean res=!moutonClicked&&mousePressedOnMouton;
-		moutonClicked=mousePressedOnMouton;
-		if (!debug){
-			System.out.println("Pos Mouse "+mouseX+" "+mouseY);
-			System.out.println("Entre "+posX+" "+(posX+128)+" et "+(posY+(int)bond)+" "+(posY+128+(int)bond));
-		}
-		return res;
-	}
 
-	private void ajoutPDV(int valPV){
-		pointDeVie+=valPV;
-		//domage
-		if (etat!=Etat.MORT&&valPV<0){
-			//Belement avec une autre image
-			if (futurPosX>posX){
-				changeImage("PNG","res/death/mouton_droite_hurt.png");
-			}
-			else{
-				changeImage("PNG","res/death/mouton_gauche_hurt.png");
-			}
-			beleTimeDeb=getTime();
-			belement.playAsSoundEffect(1.0f, 1.0f, false);
-			SoundStore.get().poll(0);
-			etat=Etat.BELE;
-			beleDuree=400;
-		}
-		if (pointDeVie<=0){
-			etat=Etat.MORT;
-		}
-	}
-	
+	//Fonctions d'action
 	public void deplacer(){
 		if ((vitesse>=Math.abs(futurPosX-posX))&&((vitesse>=Math.abs(futurPosY-posY)))){
 			etat=Etat.ATTEND;
@@ -344,6 +381,7 @@ public class Mouton extends Image {
 	}
 	}
 	
+	//Autres fonctions
 	public String toString(){
 		return etat.toString();
 	}

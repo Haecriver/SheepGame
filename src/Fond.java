@@ -17,6 +17,4 @@ public class Fond extends Image {
 	public void render(){
 		super.render(0,0);
 	}
-	
-
 }

@@ -1,0 +1,4 @@
+Gestion des collisions
+Gestion de la priorité de l'image
+Une pause/menu
+Input menu
